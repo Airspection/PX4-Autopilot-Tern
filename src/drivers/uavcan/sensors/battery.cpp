@@ -84,6 +84,13 @@ int UavcanBatteryBridge::init()
 void
 UavcanBatteryBridge::battery_sub_cb(const uavcan::ReceivedDataStructure<uavcan::equipment::power::BatteryInfo> &msg)
 {
+	
+	// Ignore unwanted DroneCAN battery sensor node ID 51
+	if (msg.getSrcNodeID().get() == 51) {
+		return;
+	}
+
+
 	uint8_t instance = 0;
 
 	for (instance = 0; instance < battery_status_s::MAX_INSTANCES; instance++) {
@@ -154,6 +161,11 @@ void
 UavcanBatteryBridge::battery_aux_sub_cb(const uavcan::ReceivedDataStructure<ardupilot::equipment::power::BatteryInfoAux>
 					&msg)
 {
+	// Ignore unwanted DroneCAN battery sensor node ID 51
+	if (msg.getSrcNodeID().get() == 51) {
+		return;
+	}
+
 	uint8_t instance = 0;
 
 	for (instance = 0; instance < battery_status_s::MAX_INSTANCES; instance++) {
