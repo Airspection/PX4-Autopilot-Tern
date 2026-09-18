@@ -69,9 +69,10 @@ PARAM_DEFINE_INT32(VT_FWD_THRUST_EN, 0);
  *
  * Scale applied to the demanded down-pitch to get the fixed-wing forward actuation in hover mode.
  * Enabled via VT_FWD_THRUST_EN.
+ * Airspection: extended maximum for experimental pusher-assist authority testing.
  *
  * @min 0.0
- * @max 2.0
+ * @max 4.0
  * @increment 0.01
  * @decimal 2
  * @group VTOL Attitude Control
