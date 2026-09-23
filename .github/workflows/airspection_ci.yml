@@ -1,0 +1,54 @@
+name: Airspection CI
+
+on:
+  push:
+    branches:
+      - airspection/develop
+      - airspection/release-v1.15.4
+  pull_request:
+    branches:
+      - airspection/release-v1.15.4
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  required:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container:
+      image: px4io/px4-dev-nuttx-focal:2022-08-12
+      options: --privileged --ulimit core=-1 --security-opt seccomp=unconfined
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: check_format
+            target: check_format
+          - name: validate_module_configs
+            target: validate_module_configs
+          - name: parameters_metadata
+            target: parameters_metadata
+          - name: tests
+            target: tests
+          - name: cubepilot_cubeorangeplus_default
+            target: cubepilot_cubeorangeplus_default
+          - name: px4_sitl_default
+            target: px4_sitl_default
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure Git ownership
+        run: git config --system --add safe.directory '*'
+
+      - name: Check environment
+        run: |
+          export
+          ulimit -a
+
+      - name: make ${{ matrix.target }}
+        run: make ${{ matrix.target }}

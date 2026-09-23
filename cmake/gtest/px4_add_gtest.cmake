@@ -40,6 +40,8 @@
 function(px4_add_unit_gtest)
 	# skip if unit testing is not configured
 	if(BUILD_TESTING)
+		find_package(Threads REQUIRED)
+
 		# parse source file and library dependencies from arguments
 		px4_parse_function_args(
 			NAME px4_add_unit_gtest
@@ -57,7 +59,7 @@ function(px4_add_unit_gtest)
 		add_executable(${TESTNAME} EXCLUDE_FROM_ALL ${SRC} ${EXTRA_SRCS})
 
 		# link the libary to test and gtest
-		target_link_libraries(${TESTNAME} ${LINKLIBS} gtest_main)
+		target_link_libraries(${TESTNAME} ${LINKLIBS} gtest_main pthread)
 
 		if(COMPILE_FLAGS)
 			target_compile_options(${TESTNAME} PRIVATE ${COMPILE_FLAGS})
@@ -80,6 +82,8 @@ endfunction()
 function(px4_add_functional_gtest)
 	# skip if unit testing is not configured
 	if(BUILD_TESTING)
+		find_package(Threads REQUIRED)
+
 		# parse source file and library dependencies from arguments
 		px4_parse_function_args(
 			NAME px4_add_functional_gtest
@@ -111,6 +115,7 @@ function(px4_add_functional_gtest)
 		                                              perf
 		                                              tinybson
 		                                              uorb_msgs
+		                                              pthread
 		                                              test_stubs)  #put test_stubs last
 
 		if(COMPILE_FLAGS)
