@@ -14,28 +14,23 @@ permissions:
   contents: read
 
 jobs:
-  required:
-    name: ${{ matrix.name }}
+  core-checks:
+    name: ${{ matrix.target }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     container:
       image: px4io/px4-dev-nuttx-focal:2022-08-12
       options: --privileged --ulimit core=-1 --security-opt seccomp=unconfined
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: check_format
-            target: check_format
-          - name: validate_module_configs
-            target: validate_module_configs
-          - name: parameters_metadata
-            target: parameters_metadata
-          - name: tests
-            target: tests
-          - name: cubepilot_cubeorangeplus_default
-            target: cubepilot_cubeorangeplus_default
-          - name: px4_sitl_default
-            target: px4_sitl_default
+        target:
+          - check_format
+          - shellcheck_all
+          - validate_module_configs
+          - parameters_metadata
+          - airframe_metadata
+          - module_documentation
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,3 +47,154 @@ jobs:
 
       - name: make ${{ matrix.target }}
         run: make ${{ matrix.target }}
+
+  static-analysis:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: clang-tidy
+            container: px4io/px4-dev-clang:2021-09-08
+            command: make clang-tidy-quiet
+          - name: python-mypy-flake8
+            container: px4io/px4-dev-nuttx-focal:2022-08-12
+            command: |
+              python3 -m venv /tmp/airspection-python-checks
+              . /tmp/airspection-python-checks/bin/activate
+              pip install --upgrade pip
+              pip install mypy types-requests flake8
+              mypy --strict test/mavsdk_tests/*.py
+              flake8 test/mavsdk_tests/*.py
+    container:
+      image: ${{ matrix.container }}
+      options: --privileged --ulimit core=-1 --security-opt seccomp=unconfined
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure Git ownership
+        run: git config --system --add safe.directory '*'
+
+      - name: ${{ matrix.name }}
+        run: ${{ matrix.command }}
+
+  unit-tests:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    container:
+      image: px4io/px4-dev-nuttx-focal:2022-08-12
+      options: --privileged --ulimit core=-1 --security-opt seccomp=unconfined
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: unit-tests
+            command: make tests
+          - name: unit-tests-coverage
+            command: make tests_coverage
+          - name: ekf-unit-tests
+            command: make tests TESTFILTER=EKF
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure Git ownership
+        run: git config --system --add safe.directory '*'
+
+      - name: ${{ matrix.name }}
+        run: ${{ matrix.command }}
+
+  firmware-build:
+    name: Cube Orange Plus firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    container:
+      image: px4io/px4-dev-nuttx-focal:2022-08-12
+      options: --privileged --ulimit core=-1 --security-opt seccomp=unconfined
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure Git ownership
+        run: git config --system --add safe.directory '*'
+
+      - name: Build CubePilot Orange Plus
+        run: make cubepilot_cubeorangeplus_default
+
+  sitl-build:
+    name: PX4 SITL build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: px4io/px4-dev-nuttx-focal:2022-08-12
+      options: --privileged --ulimit core=-1 --security-opt seccomp=unconfined
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure Git ownership
+        run: git config --system --add safe.directory '*'
+
+      - name: Build PX4 SITL
+        run: make px4_sitl_default
+
+  standard-vtol-mavsdk:
+    name: Standard VTOL SITL/MAVSDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: px4io/px4-dev-simulation-focal:2021-09-08
+      options: --privileged --ulimit core=-1 --security-opt seccomp=unconfined
+    env:
+      PX4_CMAKE_BUILD_TYPE: RelWithDebInfo
+      PX4_HOME_LAT: 47.397742
+      PX4_HOME_LON: 8.545594
+      PX4_HOME_ALT: 488
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure Git ownership
+        run: git config --system --add safe.directory '*'
+
+      - name: Install MAVSDK
+        run: |
+          MAVSDK_VERSION="$(cat test/mavsdk_tests/MAVSDK_VERSION)"
+          wget -q -nc "https://github.com/mavlink/MAVSDK/releases/download/v${MAVSDK_VERSION}/libmavsdk-dev_${MAVSDK_VERSION}_ubuntu20.04_amd64.deb"
+          dpkg -i "libmavsdk-dev_${MAVSDK_VERSION}_ubuntu20.04_amd64.deb"
+
+      - name: Build SITL and standard VTOL MAVSDK tests
+        run: |
+          make px4_sitl_default
+          make px4_sitl_default sitl_gazebo-classic
+          DONT_RUN=1 make px4_sitl_default sitl_gazebo-classic mavsdk_tests
+
+      - name: Run standard VTOL MAVSDK suite
+        run: |
+          test/mavsdk_tests/mavsdk_test_runner.py \
+            --speed-factor 20 \
+            --abort-early \
+            --model standard_vtol \
+            test/mavsdk_tests/configs/sitl.json \
+            --verbose
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: standard-vtol-mavsdk-logs
+          path: logs
+          if-no-files-found: ignore
